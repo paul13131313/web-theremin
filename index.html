@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Web Theremin</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    background: #000;
+    overflow: hidden;
+    touch-action: none;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+    height: 100%;
+    width: 100%;
+    position: fixed;
+    top: 0;
+    left: 0;
+  }
+
+  body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Rajdhani', sans-serif;
+  }
+
+  #title {
+    font-family: 'Orbitron', sans-serif;
+    color: #ff4444;
+    font-size: clamp(14px, 3vw, 22px);
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    opacity: 0.7;
+    position: fixed;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    white-space: nowrap;
+    z-index: 10;
+    pointer-events: none;
+  }
+
+  #instructions {
+    position: fixed;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: #666;
+    font-size: clamp(11px, 2.5vw, 14px);
+    letter-spacing: 0.15em;
+    text-align: center;
+    white-space: nowrap;
+    z-index: 10;
+    transition: opacity 1s;
+    pointer-events: none;
+  }
+
+  #play-area {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1;
+  }
+
+  #theremin-container {
+    position: relative;
+    width: min(70vw, 300px);
+    height: min(80vh, 550px);
+    pointer-events: none;
+  }
+
+  .theremin-glow {
+    filter: drop-shadow(0 0 8px rgba(180, 140, 100, 0.0));
+    transition: filter 0.3s;
+  }
+  .theremin-glow.active {
+    filter: drop-shadow(0 0 20px rgba(255, 100, 50, 0.6)) drop-shadow(0 0 40px rgba(255, 60, 30, 0.3));
+  }
+
+  #freq-display, #vol-display {
+    position: fixed;
+    font-family: 'Orbitron', sans-serif;
+    font-size: clamp(10px, 2vw, 13px);
+    letter-spacing: 0.1em;
+    opacity: 0;
+    transition: opacity 0.3s;
+    z-index: 10;
+    pointer-events: none;
+  }
+  #freq-display {
+    top: 50px;
+    right: 16px;
+    color: #ff6644;
+  }
+  #vol-display {
+    top: 50px;
+    left: 16px;
+    color: #44aaff;
+  }
+  #freq-display.show, #vol-display.show { opacity: 0.8; }
+
+  .touch-ring {
+    position: fixed;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 80, 40, 0.5);
+    pointer-events: none;
+    transform: translate(-50%, -50%);
+    z-index: 5;
+    animation: ring-pulse 1.5s ease-out forwards;
+  }
+  @keyframes ring-pulse {
+    0% { width: 20px; height: 20px; opacity: 0.8; }
+    100% { width: 120px; height: 120px; opacity: 0; }
+  }
+
+  #scanline {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 3px,
+      rgba(255,255,255,0.008) 3px,
+      rgba(255,255,255,0.008) 4px
+    );
+    pointer-events: none;
+    z-index: 20;
+  }
+
+  #start-btn {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: transparent;
+    border: 1px solid #ff4444;
+    color: #ff4444;
+    font-family: 'Orbitron', sans-serif;
+    font-size: clamp(14px, 3vw, 18px);
+    letter-spacing: 0.3em;
+    padding: 16px 40px;
+    cursor: pointer;
+    z-index: 30;
+    transition: all 0.3s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #start-btn:hover, #start-btn:active {
+    background: #ff4444;
+    color: #000;
+    box-shadow: 0 0 30px rgba(255, 68, 68, 0.4);
+  }
+  #start-btn.hidden {
+    display: none;
+  }
+
+  #waveform {
+    position: fixed;
+    bottom: 40px;
+    left: 50%;
+    transform: translateX(-50%);
+    pointer-events: none;
+    z-index: 3;
+    opacity: 0;
+    transition: opacity 0.5s;
+  }
+  #waveform.show { opacity: 0.6; }
+</style>
+</head>
+<body>
+
+<div id="title">WEB THEREMIN</div>
+
+<div id="play-area">
+  <div id="theremin-container">
+    <svg class="theremin-glow" viewBox="0 0 300 550" width="100%" height="100%">
+      <g id="vol-antenna">
+        <line x1="60" y1="160" x2="60" y2="30" stroke="#c4a882" stroke-width="2.5" stroke-linecap="round"/>
+        <ellipse cx="60" cy="22" rx="18" ry="10" fill="none" stroke="#c4a882" stroke-width="2.5"/>
+      </g>
+      <g id="pitch-antenna">
+        <line x1="240" y1="160" x2="240" y2="8" stroke="#c4a882" stroke-width="2.5" stroke-linecap="round"/>
+        <circle cx="240" cy="6" r="3" fill="#c4a882"/>
+      </g>
+      <rect x="40" y="160" width="220" height="140" rx="8" ry="8" fill="#2a1f14"/>
+      <rect x="40" y="160" width="220" height="140" rx="8" ry="8" fill="none" stroke="#5a4a38" stroke-width="1.5"/>
+      <rect x="55" y="172" width="190" height="4" rx="2" fill="#3d2e1f"/>
+      <g opacity="0.6">
+        <line x1="80" y1="200" x2="220" y2="200" stroke="#4a3a28" stroke-width="1.2"/>
+        <line x1="80" y1="208" x2="220" y2="208" stroke="#4a3a28" stroke-width="1.2"/>
+        <line x1="80" y1="216" x2="220" y2="216" stroke="#4a3a28" stroke-width="1.2"/>
+        <line x1="80" y1="224" x2="220" y2="224" stroke="#4a3a28" stroke-width="1.2"/>
+        <line x1="80" y1="232" x2="220" y2="232" stroke="#4a3a28" stroke-width="1.2"/>
+        <line x1="80" y1="240" x2="220" y2="240" stroke="#4a3a28" stroke-width="1.2"/>
+        <line x1="80" y1="248" x2="220" y2="248" stroke="#4a3a28" stroke-width="1.2"/>
+        <line x1="80" y1="256" x2="220" y2="256" stroke="#4a3a28" stroke-width="1.2"/>
+        <line x1="80" y1="264" x2="220" y2="264" stroke="#4a3a28" stroke-width="1.2"/>
+      </g>
+      <circle cx="90" cy="280" r="10" fill="#1a1208" stroke="#6a5a48" stroke-width="1"/>
+      <line x1="90" y1="272" x2="90" y2="276" stroke="#8a7a68" stroke-width="1.5" stroke-linecap="round"/>
+      <circle cx="150" cy="280" r="10" fill="#1a1208" stroke="#6a5a48" stroke-width="1"/>
+      <line x1="150" y1="272" x2="150" y2="276" stroke="#8a7a68" stroke-width="1.5" stroke-linecap="round"/>
+      <circle cx="210" cy="280" r="10" fill="#1a1208" stroke="#6a5a48" stroke-width="1"/>
+      <line x1="210" y1="272" x2="210" y2="276" stroke="#8a7a68" stroke-width="1.5" stroke-linecap="round"/>
+      <circle id="power-led" cx="68" cy="280" r="3" fill="#330000"/>
+      <rect x="55" y="300" width="8" height="220" rx="2" fill="#3d2e1f" stroke="#5a4a38" stroke-width="0.8"/>
+      <rect x="237" y="300" width="8" height="220" rx="2" fill="#3d2e1f" stroke="#5a4a38" stroke-width="0.8"/>
+      <rect x="55" y="420" width="190" height="6" rx="2" fill="#3d2e1f" stroke="#5a4a38" stroke-width="0.8"/>
+      <ellipse cx="59" cy="522" rx="14" ry="4" fill="#2a1f14" stroke="#5a4a38" stroke-width="0.8"/>
+      <ellipse cx="241" cy="522" rx="14" ry="4" fill="#2a1f14" stroke="#5a4a38" stroke-width="0.8"/>
+      <text x="90" y="298" fill="#5a4a38" font-size="6" text-anchor="middle" font-family="'Rajdhani', sans-serif">VOL</text>
+      <text x="150" y="298" fill="#5a4a38" font-size="6" text-anchor="middle" font-family="'Rajdhani', sans-serif">TONE</text>
+      <text x="210" y="298" fill="#5a4a38" font-size="6" text-anchor="middle" font-family="'Rajdhani', sans-serif">PITCH</text>
+      <text x="150" y="192" fill="#6a5a48" font-size="9" text-anchor="middle" font-family="'Orbitron', sans-serif" letter-spacing="4">THEREMIN</text>
+    </svg>
+  </div>
+</div>
+
+<div id="freq-display"></div>
+<div id="vol-display"></div>
+<canvas id="waveform" width="300" height="60"></canvas>
+<div id="instructions">← 左右: 音程 &nbsp;↕ 上下: 音量 →</div>
+<div id="scanline"></div>
+
+<button id="start-btn">▶ PLAY</button>
+
+<script>
+let audioCtx, oscillator, osc2, gainNode, gain2, analyser;
+let isPlaying = false;
+let isInitialized = false;
+let animFrameId = null;
+
+const startBtn = document.getElementById('start-btn');
+const thereminSvg = document.querySelector('.theremin-glow');
+const freqDisplay = document.getElementById('freq-display');
+const volDisplay = document.getElementById('vol-display');
+const waveformCanvas = document.getElementById('waveform');
+const waveformCtx = waveformCanvas.getContext('2d');
+const powerLed = document.getElementById('power-led');
+const instructionsEl = document.getElementById('instructions');
+const playArea = document.getElementById('play-area');
+
+function initAudio() {
+  if (isInitialized) return;
+
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') {
+    audioCtx.resume();
+  }
+
+  oscillator = audioCtx.createOscillator();
+  oscillator.type = 'sine';
+  oscillator.frequency.value = 440;
+
+  osc2 = audioCtx.createOscillator();
+  osc2.type = 'sine';
+  osc2.frequency.value = 441;
+
+  gainNode = audioCtx.createGain();
+  gainNode.gain.value = 0;
+
+  gain2 = audioCtx.createGain();
+  gain2.gain.value = 0;
+
+  const vibrato = audioCtx.createOscillator();
+  const vibratoGain = audioCtx.createGain();
+  vibrato.frequency.value = 5.5;
+  vibratoGain.gain.value = 3;
+  vibrato.connect(vibratoGain);
+  vibratoGain.connect(oscillator.frequency);
+  vibratoGain.connect(osc2.frequency);
+  vibrato.start();
+
+  analyser = audioCtx.createAnalyser();
+  analyser.fftSize = 256;
+
+  oscillator.connect(gainNode);
+  osc2.connect(gain2);
+  gainNode.connect(analyser);
+  gain2.connect(analyser);
+  analyser.connect(audioCtx.destination);
+
+  oscillator.start();
+  osc2.start();
+
+  isInitialized = true;
+  powerLed.setAttribute('fill', '#ff2200');
+  powerLed.setAttribute('style', 'filter: drop-shadow(0 0 4px #ff2200)');
+}
+
+function updateSound(clientX, clientY) {
+  if (!isInitialized) return;
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+
+  const x = clientX / window.innerWidth;
+  const y = clientY / window.innerHeight;
+
+  const minFreq = 120;
+  const maxFreq = 1800;
+  const freq = minFreq * Math.pow(maxFreq / minFreq, x);
+  const vol = Math.max(0, Math.min(1, 1 - y)) * 0.35;
+
+  const now = audioCtx.currentTime;
+  oscillator.frequency.setTargetAtTime(freq, now, 0.02);
+  osc2.frequency.setTargetAtTime(freq * 1.003, now, 0.02);
+  gainNode.gain.setTargetAtTime(vol, now, 0.02);
+  gain2.gain.setTargetAtTime(vol * 0.3, now, 0.02);
+
+  freqDisplay.textContent = Math.round(freq) + ' Hz';
+  freqDisplay.classList.add('show');
+  volDisplay.textContent = Math.round(vol / 0.35 * 100) + '%';
+  volDisplay.classList.add('show');
+
+  thereminSvg.classList.add('active');
+  waveformCanvas.classList.add('show');
+
+  if (!isPlaying) {
+    isPlaying = true;
+    drawWaveform();
+  }
+}
+
+function stopSound() {
+  if (!isInitialized) return;
+  const now = audioCtx.currentTime;
+  gainNode.gain.setTargetAtTime(0, now, 0.08);
+  gain2.gain.setTargetAtTime(0, now, 0.08);
+  thereminSvg.classList.remove('active');
+  freqDisplay.classList.remove('show');
+  volDisplay.classList.remove('show');
+  waveformCanvas.classList.remove('show');
+  isPlaying = false;
+  if (animFrameId) {
+    cancelAnimationFrame(animFrameId);
+    animFrameId = null;
+  }
+}
+
+function createTouchRing(x, y) {
+  const ring = document.createElement('div');
+  ring.className = 'touch-ring';
+  ring.style.left = x + 'px';
+  ring.style.top = y + 'px';
+  document.body.appendChild(ring);
+  setTimeout(() => ring.remove(), 1500);
+}
+
+function drawWaveform() {
+  if (!isPlaying || !analyser) return;
+  const bufferLength = analyser.frequencyBinCount;
+  const dataArray = new Uint8Array(bufferLength);
+  analyser.getByteTimeDomainData(dataArray);
+
+  waveformCtx.clearRect(0, 0, waveformCanvas.width, waveformCanvas.height);
+  waveformCtx.lineWidth = 1.5;
+  waveformCtx.strokeStyle = '#ff4422';
+  waveformCtx.beginPath();
+
+  const sliceWidth = waveformCanvas.width / bufferLength;
+  let x = 0;
+  for (let i = 0; i < bufferLength; i++) {
+    const v = dataArray[i] / 128.0;
+    const y = (v * waveformCanvas.height) / 2;
+    if (i === 0) waveformCtx.moveTo(x, y);
+    else waveformCtx.lineTo(x, y);
+    x += sliceWidth;
+  }
+  waveformCtx.stroke();
+  animFrameId = requestAnimationFrame(drawWaveform);
+}
+
+// --- Start button (works for both click and tap) ---
+function startApp(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  if (isInitialized) return;
+  initAudio();
+  startBtn.classList.add('hidden');
+  instructionsEl.style.opacity = '1';
+  setTimeout(() => { instructionsEl.style.opacity = '0'; }, 4000);
+}
+
+startBtn.addEventListener('touchend', startApp, { passive: false });
+startBtn.addEventListener('click', startApp);
+
+// --- Touch events (mobile) ---
+playArea.addEventListener('touchstart', function(e) {
+  e.preventDefault();
+  if (!isInitialized) return;
+  const t = e.touches[0];
+  updateSound(t.clientX, t.clientY);
+  createTouchRing(t.clientX, t.clientY);
+}, { passive: false });
+
+playArea.addEventListener('touchmove', function(e) {
+  e.preventDefault();
+  if (!isInitialized) return;
+  const t = e.touches[0];
+  updateSound(t.clientX, t.clientY);
+}, { passive: false });
+
+playArea.addEventListener('touchend', function(e) {
+  e.preventDefault();
+  stopSound();
+}, { passive: false });
+
+playArea.addEventListener('touchcancel', function(e) {
+  e.preventDefault();
+  stopSound();
+}, { passive: false });
+
+// --- Mouse events (desktop) ---
+let mouseDown = false;
+
+playArea.addEventListener('mousedown', function(e) {
+  if (!isInitialized) return;
+  mouseDown = true;
+  updateSound(e.clientX, e.clientY);
+});
+
+window.addEventListener('mousemove', function(e) {
+  if (!isInitialized || !mouseDown) return;
+  updateSound(e.clientX, e.clientY);
+});
+
+window.addEventListener('mouseup', function() {
+  if (!isInitialized || !mouseDown) return;
+  mouseDown = false;
+  stopSound();
+});
+
+// Block all default touch behaviors globally
+document.addEventListener('touchmove', function(e) { e.preventDefault(); }, { passive: false });
+document.addEventListener('gesturestart', function(e) { e.preventDefault(); }, { passive: false });
+document.addEventListener('gesturechange', function(e) { e.preventDefault(); }, { passive: false });
+</script>
+</body>
+</html>
